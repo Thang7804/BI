@@ -26,7 +26,7 @@ SELECT
     ROUND(SUM(price)::numeric,         2)       AS revenue,
     ROUND(SUM(freight_value)::numeric, 2)       AS freight_revenue,
     ROUND(SUM(total_value)::numeric,   2)       AS gross_revenue,
-    ROUND(AVG(review_score)::numeric,  2)       AS avg_review_score,
+    ROUND(AVG(NULLIF(review_score, 0))::numeric,  2)       AS avg_review_score,
     ROUND(AVG(delivery_days)::numeric, 1)       AS avg_delivery_days,
     ROUND(
         100.0 * SUM(CASE WHEN is_on_time THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0),
@@ -46,7 +46,7 @@ SELECT
     COUNT(DISTINCT order_id)                              AS total_orders,
     COUNT(*)                                              AS total_items,
     ROUND(SUM(price)::numeric, 2)                         AS revenue,
-    ROUND(AVG(review_score)::numeric, 2)                  AS avg_review_score,
+    ROUND(AVG(NULLIF(review_score, 0))::numeric, 2)                  AS avg_review_score,
     ROUND(AVG(delivery_days)::numeric, 1)                 AS avg_delivery_days
 FROM dw.fact_sales
 GROUP BY category_en
@@ -80,7 +80,7 @@ SELECT
     COUNT(DISTINCT order_id)                AS total_orders,
     COUNT(*)                                AS total_items,
     ROUND(SUM(price)::numeric,        2)    AS total_revenue,
-    ROUND(AVG(review_score)::numeric, 2)    AS avg_review_score,
+    ROUND(AVG(NULLIF(review_score, 0))::numeric, 2)    AS avg_review_score,
     ROUND(AVG(delivery_days)::numeric,1)    AS avg_delivery_days,
     ROUND(
         100.0 * SUM(CASE WHEN is_on_time THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0),
