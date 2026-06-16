@@ -167,7 +167,7 @@ def main():
     run_sql(engine, "reporting.agg_payment_analysis",    AGG_PAYMENT_ANALYSIS)
     run_sql(engine, "reporting.agg_delivery_analysis",   AGG_DELIVERY_ANALYSIS)
 
-    log.info("✅ build_reporting.py hoàn thành! reporting (aggregates) sẵn sàng.")
+    log.info("build_reporting.py hoàn thành! reporting (aggregates) sẵn sàng.")
 
 
 if __name__ == "__main__":
