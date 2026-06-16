@@ -1,0 +1,19 @@
+# Environment files
+.env
+
+# Data directory (avoid uploading large datasets)
+data/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

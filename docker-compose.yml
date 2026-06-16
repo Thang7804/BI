@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: olist_postgres
+    environment:
+      POSTGRES_USER: olist
+      POSTGRES_PASSWORD: olist123
+      POSTGRES_DB: olist_dw
+      POSTGRES_MULTIPLE_DATABASES: kestra_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init_db.sql
+      - ./scripts/create_kestra_db.sql:/docker-entrypoint-initdb.d/00_create_kestra_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U olist -d olist_dw"]
+      interval: 10s
+      retries: 5
+
+  kestra:
+    image: kestra/kestra:latest-full
+    container_name: olist_kestra
+    pull_policy: always
+    user: root
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        /app/kestra server standalone \
+          --worker-thread=4 \
+          --flow-path=/flows
+    environment:
+      KESTRA_CONFIGURATION: |
+        datasources:
+          postgres:
+            url: jdbc:postgresql://postgres:5432/kestra_db
+            driverClassName: org.postgresql.Driver
+            username: olist
+            password: olist123
+        kestra:
+          repository:
+            type: postgres
+          queue:
+            type: postgres
+          storage:
+            type: local
+            local:
+              basePath: /tmp/kestra-storage
+          tutorialFlows:
+            enabled: false
+          encryption:
+            secret-key: "12345678901234567890123456789012"
+      KESTRA_SECRET_KAGGLE_USERNAME: ${KAGGLE_USERNAME}
+      KESTRA_SECRET_KAGGLE_KEY: ${KAGGLE_KEY}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./kestra/flows:/flows
+      - kestra_storage:/tmp/kestra-storage
+      - ./scripts:/scripts
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  kestra_storage:

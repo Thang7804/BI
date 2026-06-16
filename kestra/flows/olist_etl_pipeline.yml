@@ -1,0 +1,146 @@
+id: olist_etl_pipeline
+namespace: de.olist
+
+description: |
+  Full ETL pipeline cho Olist Brazilian E-commerce dataset.
+  Flow: Extract & Load → Transform → Build DW → Build Reporting → Data Quality Check
+
+labels:
+  project: olist-de
+  env: dev
+
+triggers:
+  - id: daily_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 2 * * *"
+    disabled: true
+
+variables:
+  db_url: "postgresql://olist:olist123@postgres:5432/olist_dw"
+  jdbc_url: "jdbc:postgresql://postgres:5432/olist_dw"
+
+tasks:
+  - id: etl_pipeline
+    type: io.kestra.plugin.core.flow.Sequential
+    tasks:
+
+      - id: check_db_connection
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        url: "{{ vars.jdbc_url }}"
+        username: olist
+        password: olist123
+        transaction: false
+        sql: SELECT current_database(), now() AS checked_at
+
+      - id: extract_load
+        type: io.kestra.plugin.scripts.python.Commands
+        description: Download Olist dataset và load vào raw schema
+        beforeCommands:
+          - pip install pandas sqlalchemy psycopg2-binary kaggle python-dotenv --quiet
+        commands:
+          - python /scripts/extract_load.py
+        env:
+          DATABASE_URL: "{{ vars.db_url }}"
+          DATA_DIR: /data
+          KAGGLE_USERNAME: "{{ secret('KAGGLE_USERNAME') }}"
+          KAGGLE_KEY: "{{ secret('KAGGLE_KEY') }}"
+        taskRunner:
+          type: io.kestra.plugin.core.runner.Process
+
+      - id: raw_row_counts
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        url: "{{ vars.jdbc_url }}"
+        username: olist
+        password: olist123
+        transaction: false
+        sql: |
+          SELECT 'orders'      AS tbl, COUNT(*) AS rows FROM raw.orders      UNION ALL
+          SELECT 'order_items' AS tbl, COUNT(*) AS rows FROM raw.order_items  UNION ALL
+          SELECT 'customers'   AS tbl, COUNT(*) AS rows FROM raw.customers    UNION ALL
+          SELECT 'products'    AS tbl, COUNT(*) AS rows FROM raw.products     UNION ALL
+          SELECT 'sellers'     AS tbl, COUNT(*) AS rows FROM raw.sellers;
+
+      - id: transform
+        type: io.kestra.plugin.scripts.python.Commands
+        description: Clean, cast type → staging schema
+        beforeCommands:
+          - pip install sqlalchemy psycopg2-binary python-dotenv --quiet
+        commands:
+          - python /scripts/transform.py
+        env:
+          DATABASE_URL: "{{ vars.db_url }}"
+        taskRunner:
+          type: io.kestra.plugin.core.runner.Process
+
+      - id: build_dw
+        type: io.kestra.plugin.scripts.python.Commands
+        description: Build Star Schema — dim tables + fact_sales trong dw schema
+        beforeCommands:
+          - pip install sqlalchemy psycopg2-binary python-dotenv --quiet
+        commands:
+          - python /scripts/build_dw.py
+        env:
+          DATABASE_URL: "{{ vars.db_url }}"
+        taskRunner:
+          type: io.kestra.plugin.core.runner.Process
+
+      - id: build_reporting
+        type: io.kestra.plugin.scripts.python.Commands
+        description: Build các bảng aggregate trong reporting schema phục vụ Power BI
+        beforeCommands:
+          - pip install sqlalchemy psycopg2-binary python-dotenv --quiet
+        commands:
+          - python /scripts/build_reporting.py
+        env:
+          DATABASE_URL: "{{ vars.db_url }}"
+        taskRunner:
+          type: io.kestra.plugin.core.runner.Process
+
+      - id: dq_checks
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        url: "{{ vars.jdbc_url }}"
+        username: olist
+        password: olist123
+        transaction: false
+        sql: |
+          SELECT
+            'fact_sales_count' AS check_name,
+            COUNT(*) AS value,
+            CASE WHEN COUNT(*) > 90000 THEN 'PASS' ELSE 'FAIL' END AS status
+          FROM dw.fact_sales
+          UNION ALL
+          SELECT
+            'null_order_id' AS check_name,
+            COUNT(*) AS value,
+            CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS status
+          FROM dw.fact_sales
+          WHERE order_id IS NULL
+          UNION ALL
+          SELECT
+            'max_monthly_revenue' AS check_name,
+            MAX(revenue)::int AS value,
+            CASE WHEN MAX(revenue) > 0 THEN 'PASS' ELSE 'FAIL' END AS status
+          FROM reporting.agg_monthly_revenue;
+
+      - id: pipeline_summary
+        type: io.kestra.plugin.jdbc.postgresql.Queries
+        url: "{{ vars.jdbc_url }}"
+        username: olist
+        password: olist123
+        transaction: false
+        sql: |
+          SELECT
+            (SELECT COUNT(*) FROM dw.fact_sales)                      AS total_order_items,
+            (SELECT COUNT(DISTINCT order_id) FROM dw.fact_sales)      AS total_orders,
+            (SELECT ROUND(SUM(price)::numeric, 2) FROM dw.fact_sales) AS total_revenue,
+            (SELECT COUNT(DISTINCT seller_id) FROM dw.fact_sales)     AS total_sellers,
+            now() AS pipeline_completed_at;
+
+errors:
+  - id: on_failure_log
+    type: io.kestra.plugin.core.log.Log
+    message: |
+      Pipeline FAILED!
+      Failed task: {{ taskrun.id }}
+      Execution: {{ execution.id }}
+    level: ERROR
