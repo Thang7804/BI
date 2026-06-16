@@ -1,12 +1,3 @@
-"""
-build_dw.py
-Bước cuối của ETL pipeline: staging → dw (Star Schema) → reporting (aggregates)
-
-Thứ tự chạy:
-  1. Tạo/seed dim tables (dim_customer, dim_seller, dim_product, dim_time, dim_region)
-  2. Build fact_sales (JOIN tất cả staging + dim_time)
-  3. Build reporting.agg_* (aggregate tables phục vụ Metabase dashboard)
-"""
 
 import os
 import logging
@@ -269,7 +260,7 @@ def main():
     log.info("━━━ STEP 2: Building Fact Table ━━━")
     run_sql(engine, "fact_sales",   FACT_SALES)
 
-    log.info("✅ build_dw.py hoàn thành! dw (Star Schema) sẵn sàng.")
+    log.info("build_dw.py hoàn thành! dw (Star Schema) sẵn sàng.")
 
 
 if __name__ == "__main__":

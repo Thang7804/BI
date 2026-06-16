@@ -3,7 +3,6 @@ namespace: de.olist
 
 description: |
   Full ETL pipeline cho Olist Brazilian E-commerce dataset.
-  Flow: Extract & Load → Transform → Build DW → Data Quality Check
 
 labels:
   project: olist-de
@@ -61,7 +60,10 @@ tasks:
           SELECT 'order_items' AS tbl, COUNT(*) AS rows FROM raw.order_items  UNION ALL
           SELECT 'customers'   AS tbl, COUNT(*) AS rows FROM raw.customers    UNION ALL
           SELECT 'products'    AS tbl, COUNT(*) AS rows FROM raw.products     UNION ALL
-          SELECT 'sellers'     AS tbl, COUNT(*) AS rows FROM raw.sellers;
+          SELECT 'sellers'     AS tbl, COUNT(*) AS rows FROM raw.sellers      UNION ALL
+          SELECT 'reviews'     AS tbl, COUNT(*) AS rows FROM raw.order_reviews UNION ALL
+          SELECT 'payments'    AS tbl, COUNT(*) AS rows FROM raw.order_payments UNION ALL
+          SELECT 'translation' AS tbl, COUNT(*) AS rows FROM raw.product_category_name_translation;
 
       - id: transform
         type: io.kestra.plugin.scripts.python.Commands
