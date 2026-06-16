@@ -95,15 +95,26 @@ AGG_PAYMENT_ANALYSIS = """
 DROP TABLE IF EXISTS reporting.agg_payment_analysis;
 
 CREATE TABLE reporting.agg_payment_analysis AS
+WITH order_payments AS (
+    SELECT DISTINCT
+        order_id,
+        payment_type,
+        total_payment,
+        max_installments
+    FROM dw.fact_sales
+    WHERE payment_type IS NOT NULL
+)
 SELECT
     payment_type,
-    COUNT(DISTINCT order_id)                AS total_orders,
-    ROUND(SUM(total_payment)::numeric, 2)   AS total_payment_value,
-    ROUND(AVG(max_installments)::numeric,1) AS avg_installments,
-    ROUND(100.0 * COUNT(DISTINCT order_id)::numeric
-          / NULLIF(SUM(COUNT(DISTINCT order_id)) OVER (), 0), 1) AS pct_orders
-FROM dw.fact_sales
-WHERE payment_type IS NOT NULL
+    COUNT(order_id)                              AS total_orders,
+    ROUND(SUM(total_payment)::numeric, 2)        AS total_payment_value,
+    ROUND(AVG(max_installments)::numeric, 1)     AS avg_installments,
+    ROUND(
+        100.0 * COUNT(order_id)::numeric
+        / NULLIF(SUM(COUNT(order_id)) OVER (), 0),
+        1
+    )                                           AS pct_orders
+FROM order_payments
 GROUP BY payment_type
 ORDER BY total_orders DESC;
 """

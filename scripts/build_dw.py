@@ -30,10 +30,10 @@ TRUNCATE TABLE dw.dim_customer;
 INSERT INTO dw.dim_customer (customer_id, city, state, zip_code_prefix)
 SELECT DISTINCT
     customer_id,
-    customer_city            AS city,
-    customer_state           AS state,
-    customer_zip_code_prefix AS zip_code_prefix
-FROM raw.customers
+    city,
+    state,
+    zip_code_prefix
+FROM staging.stg_customers
 ON CONFLICT (customer_id) DO NOTHING;
 """
 
@@ -43,9 +43,9 @@ TRUNCATE TABLE dw.dim_seller;
 INSERT INTO dw.dim_seller (seller_id, city, state)
 SELECT DISTINCT
     seller_id,
-    seller_city  AS city,
-    seller_state AS state
-FROM raw.sellers
+    city,
+    state
+FROM staging.stg_sellers
 ON CONFLICT (seller_id) DO NOTHING;
 """
 
@@ -54,22 +54,20 @@ TRUNCATE TABLE dw.dim_product;
 
 INSERT INTO dw.dim_product
     (product_id, category_pt, category_en, weight_g, length_cm, height_cm, width_cm, photos_qty)
-SELECT
-    p.product_id,
-    p.product_category_name                                           AS category_pt,
-    COALESCE(t.product_category_name_english, p.product_category_name) AS category_en,
-    p.product_weight_g  AS weight_g,
-    p.product_length_cm AS length_cm,
-    p.product_height_cm AS height_cm,
-    p.product_width_cm  AS width_cm,
-    p.product_photos_qty AS photos_qty
-FROM raw.products p
-LEFT JOIN raw.product_category_name_translation t
-       ON p.product_category_name = t.product_category_name
+SELECT DISTINCT
+    product_id,
+    category_pt,
+    category_en,
+    weight_g,
+    length_cm,
+    height_cm,
+    width_cm,
+    photos_qty
+FROM staging.stg_products
 ON CONFLICT (product_id) DO NOTHING;
 """
 
-# Tạo dim_time từ toàn bộ ngày mua hàng trong raw.orders
+# Tạo dim_time từ toàn bộ ngày mua hàng trong staging.stg_orders
 DIM_TIME = """
 TRUNCATE TABLE dw.dim_time;
 
@@ -82,9 +80,9 @@ SELECT DISTINCT
     EXTRACT(WEEK    FROM d)::INT          AS week,
     EXTRACT(DOW     FROM d)::INT          AS day_of_week  -- 0=Sun..6=Sat
 FROM (
-    SELECT DISTINCT order_purchase_timestamp::date AS d
-    FROM raw.orders
-    WHERE order_purchase_timestamp IS NOT NULL
+    SELECT DISTINCT purchased_at::date AS d
+    FROM staging.stg_orders
+    WHERE purchased_at IS NOT NULL
 ) t
 ON CONFLICT (time_id) DO NOTHING;
 """
@@ -161,10 +159,10 @@ SELECT
     p.total_payment,
     p.max_installments,
     oi.category                                                      AS category_en,
-    s.seller_state
+    s.state                                                          AS seller_state
 FROM staging.stg_order_items oi
 JOIN staging.stg_orders      o  USING (order_id)
-JOIN raw.sellers             s  USING (seller_id)
+JOIN staging.stg_sellers     s  USING (seller_id)
 LEFT JOIN staging.stg_reviews    r  USING (order_id)
 LEFT JOIN staging.stg_payments   p  USING (order_id)
 ON CONFLICT (order_id, order_item_id) DO NOTHING;
